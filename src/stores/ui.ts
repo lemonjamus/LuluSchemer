@@ -41,7 +41,7 @@ export const useUI = create<UIState>((set) => ({
   toast: (message, kind = 'info', action) => {
     const id = uid()
     set((s) => ({ toasts: [...s.toasts, { id, message, kind, action }] }))
-    if (kind === 'info') setTimeout(() => useUI.getState().dismiss(id), 3500)
+    if (kind === 'info') setTimeout(() => useUI.getState().dismiss(id), action ? 10000 : 3500)
   },
   dismiss: (id) => set((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) })),
 }))
@@ -62,6 +62,8 @@ interface SettingsState {
   localModel: string
   /** Let local reasoning models think before answering. Off = much faster replies. */
   localThinking: boolean
+  /** Hosted site only: where this browser reaches your local model server. */
+  localUrl: string
   /** Free-form tone / style instructions added to every AI system prompt. */
   customInstructions: string
   set:(patch: Partial<Omit<SettingsState, 'set'>>) => void
@@ -77,6 +79,7 @@ export const useSettings = create<SettingsState>()(
       snapToGrid: true,
       localModel: '',
       localThinking: false,
+      localUrl: 'http://127.0.0.1:11434',
       customInstructions: '',
       set:(patch) => set(patch),
     }),

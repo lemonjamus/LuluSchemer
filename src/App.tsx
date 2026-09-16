@@ -1,23 +1,43 @@
 import { useEffect } from 'react'
 import logo from './assets/lulu-logo.png'
+import { AuthScreen } from './components/AuthScreen'
 import { CommandPalette } from './components/CommandPalette'
 import { Dashboard } from './components/Dashboard'
 import { SettingsModal } from './components/SettingsModal'
 import { SnipOverlay } from './components/SnipOverlay'
 import { Toasts } from './components/ui'
 import { Workspace } from './components/Workspace'
+import { cloud, localDataCounts } from './services/storage'
+import { runLocalImport, useAuth } from './stores/auth'
 import { useProjects } from './stores/projects'
 import { useTasks } from './stores/tasks'
 import { useUI } from './stores/ui'
 
+const loadData = () =>
+  Promise.all([useProjects.getState().load(), useTasks.getState().load()]).catch((e) => {
+    useProjects.setState({ loaded: true }) // show the app anyway; the toast explains
+    useUI.getState().toast(`Could not load your data: ${e?.message ?? e}`, 'error', { label: 'Retry', run: () => location.reload() })
+  })
+
+/** First sign-in on a browser that already has local data: offer to copy it into the account. */
+async function offerImport() {
+  if (useProjects.getState().projects.length) return
+  const local = await localDataCounts().catch(() => ({ projects: 0, tasks: 0 }))
+  if (!local.projects && !local.tasks) return
+  useUI.getState().toast(`This browser has ${local.projects} project(s) and ${local.tasks} task(s) from before sign-in.`, 'info', {
+    label: 'Import',
+    run: () => runLocalImport(),
+  })
+}
+
 export default function App() {
   const route = useUI((s) => s.route)
   const loaded = useProjects((s) => s.loaded)
+  const ready = useAuth((s) => s.ready)
+  const userId = useAuth((s) => s.session?.user.id ?? null)
 
   useEffect(() => {
-    Promise.all([useProjects.getState().load(), useTasks.getState().load()]).catch((e) =>
-      useUI.getState().toast(`Could not open local storage: ${e?.message ?? e}`, 'error'),
-    )
+    const stopAuth = useAuth.getState().init()
     const onKey = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
         e.preventDefault()
@@ -25,17 +45,40 @@ export default function App() {
       }
     }
     window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
+    return () => {
+      stopAuth()
+      window.removeEventListener('keydown', onKey)
+    }
   }, [])
 
-  if (!loaded) {
+  useEffect(() => {
+    if (cloud && !userId) return
+    loadData().then(() => {
+      if (cloud) offerImport()
+    })
+    if (!cloud) return
+    // Pick up changes made on another device when you come back to this tab.
+    const onVisible = () => document.visibilityState === 'visible' && loadData()
+    document.addEventListener('visibilitychange', onVisible)
+    return () => document.removeEventListener('visibilitychange', onVisible)
+  }, [userId])
+
+  const boot = (
+    <div className="boot">
+      <img src={logo} alt="" />
+      LuluSchemer
+    </div>
+  )
+  if (!ready) return boot
+  if (cloud && !userId) {
     return (
-      <div className="boot">
-        <img src={logo} alt="" />
-        LuluSchemer
-      </div>
+      <>
+        <AuthScreen />
+        <Toasts />
+      </>
     )
   }
+  if (!loaded) return boot
 
   return (
     <>

@@ -1,5 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { stripThinking } from '../lib'
+import { useSettings } from '../stores/ui'
+import { accessToken } from './supabase'
 
 export interface AIImage {
   mediaType: 'image/png' | 'image/jpeg' | 'image/webp' | 'image/gif'
@@ -28,17 +30,20 @@ export interface AIProvider {
   stream(req: AIRequest, onText: (delta: string) => void, signal: AbortSignal): Promise<void>
 }
 
-// Browser talks to the Vite proxy (/api/anthropic), which injects ANTHROPIC_API_KEY server-side.
-// The apiKey below is a placeholder the proxy overwrites; no secret ever ships to the client.
+// Browser talks to /api/anthropic: the Vite proxy in dev, netlify/edge-functions/anthropic.ts when hosted.
+// Both inject ANTHROPIC_API_KEY server-side; the apiKey below is a placeholder. The hosted proxy also
+// requires the Supabase session token, so only signed-in users can spend the key.
 export const claudeProvider: AIProvider = {
   id: 'claude',
   label: 'Claude',
   supportsImages: true,
   async stream(req, onText, signal) {
+    const token = await accessToken()
     const client = new Anthropic({
       baseURL: `${location.origin}/api/anthropic`,
       apiKey: 'injected-by-proxy',
       dangerouslyAllowBrowser: true,
+      ...(token ? { defaultHeaders: { 'x-supabase-token': token } } : {}),
     })
     const stream = client.beta.messages.stream(
       {
@@ -113,8 +118,11 @@ export function hasClaudeKey(): Promise<boolean> {
   return claudeAvailable
 }
 
+/** Dev: through the Vite proxy (no CORS setup). Hosted: the browser calls your local server directly. */
+const localBase = () => (import.meta.env.DEV ? '/api/local' : useSettings.getState().localUrl.replace(/\/+$/, ''))
+
 export async function listLocalModels(): Promise<string[]> {
-  const r = await fetch('/api/local/v1/models')
+  const r = await fetch(`${localBase()}/v1/models`)
   if (!r.ok) throw new Error(`local server returned ${r.status}`)
   return ((await r.json()).data ?? []).map((m: { id: string }) => m.id)
 }
@@ -127,7 +135,7 @@ export const localProvider: AIProvider = {
   async stream(req, onText, signal) {
     const model = req.model || (await listLocalModels())[0]
     if (!model) throw new Error('No models found on the local server. Pull one first, e.g. `ollama pull qwen3`.')
-    const res = await fetch('/api/local/v1/chat/completions', {
+    const res = await fetch(`${localBase()}/v1/chat/completions`, {
       method: 'POST',
       signal,
       headers: { 'content-type': 'application/json' },
@@ -148,7 +156,7 @@ export const localProvider: AIProvider = {
     })
     if (!res.ok) {
       const detail = (await res.text().catch(() => '')).slice(0, 300)
-      throw new Error(`Local model (${model}) returned ${res.status}. ${detail || 'Is Ollama running? Check LOCAL_AI_URL in .env.'}`)
+      throw new Error(`Local model (${model}) returned ${res.status}. ${detail || (import.meta.env.DEV ? 'Is Ollama running? Check LOCAL_AI_URL in .env.' : 'Is Ollama running with OLLAMA_ORIGINS allowing this site?')}`)
     }
 
     // Parse the SSE stream; hide <think> reasoning (Qwen3 etc.) as it streams.

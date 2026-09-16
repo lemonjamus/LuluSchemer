@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react'
 import { hasClaudeKey, listLocalModels } from '../services/ai'
+import { cloud, localDataCounts } from '../services/storage'
+import { runLocalImport, useAuth } from '../stores/auth'
 import { useSettings, useUI, type ProviderChoice } from '../stores/ui'
 import { Modal } from './ui'
 
@@ -35,6 +37,7 @@ export function SettingsModal() {
   return (
     <Modal title="SETTINGS" open={open} onClose={() => useUI.getState().set({ settingsOpen: false })}>
       <div className="settings">
+        {cloud && <AccountSection />}
         <h3 className="section-label">AI</h3>
         <label className="field">
           <span>Provider</span>
@@ -56,9 +59,23 @@ export function SettingsModal() {
                 {settings.localModel && !localModels?.includes(settings.localModel) && <option value={settings.localModel}>{settings.localModel}</option>}
               </select>
             </label>
+            {!import.meta.env.DEV && (
+              <label className="field">
+                <span>Server URL</span>
+                <input
+                  className="input"
+                  defaultValue={settings.localUrl}
+                  onBlur={(e) => {
+                    settings.set({ localUrl: e.target.value.trim() })
+                    setLocalModels(undefined)
+                    listLocalModels().then(setLocalModels, () => setLocalModels(null))
+                  }}
+                />
+              </label>
+            )}
             <p className="small muted">
               Local server:{' '}
-              {localModels === undefined ? '…' : localModels ? <span className="ok">{localModels.length} model(s) found</span> : <span className="warn">not reachable. Start Ollama, or set LOCAL_AI_URL in .env and restart.</span>}
+              {localModels === undefined ? '…' : localModels ? <span className="ok">{localModels.length} model(s) found</span> : <span className="warn">{import.meta.env.DEV ? 'not reachable. Start Ollama, or set LOCAL_AI_URL in .env and restart.' : 'not reachable. Start Ollama with OLLAMA_ORIGINS set to this site (see README).'}</span>}
             </p>
             <label className="field-inline">
               <input type="checkbox" className="check" checked={settings.localThinking} onChange={(e) => settings.set({ localThinking: e.target.checked })} />
@@ -69,7 +86,7 @@ export function SettingsModal() {
           <>
             <p className="small muted">
               Claude key on dev server:{' '}
-              {keyFound === null ? '…' : keyFound ? <span className="ok">found</span> : <span className="warn">not found. Add ANTHROPIC_API_KEY to .env and restart.</span>}
+              {keyFound === null ? '…' : keyFound ? <span className="ok">found</span> : <span className="warn">{import.meta.env.DEV ? 'not found. Add ANTHROPIC_API_KEY to .env and restart.' : 'not set. Add ANTHROPIC_API_KEY in Netlify environment variables.'}</span>}
             </p>
             <label className="field">
               <span>Claude model</span>
@@ -109,8 +126,36 @@ export function SettingsModal() {
             </div>
           ))}
         </dl>
-        <p className="small muted">Data is stored locally in this browser (IndexedDB).</p>
+        <p className="small muted">{cloud ? 'Data is stored in your Supabase project and syncs across devices.' : 'Data is stored locally in this browser (IndexedDB).'}</p>
       </div>
     </Modal>
+  )
+}
+
+function AccountSection() {
+  const email = useAuth((s) => s.session?.user.email)
+  const importStatus = useAuth((s) => s.importStatus)
+  const [local, setLocal] = useState<{ projects: number; tasks: number } | null>(null)
+
+  useEffect(() => {
+    localDataCounts().then(setLocal, () => setLocal(null))
+  }, [])
+
+  return (
+    <>
+      <h3 className="section-label">ACCOUNT</h3>
+      <div className="field-inline account-row">
+        <span className="grow">Signed in as <strong>{email}</strong></span>
+        <button className="btn btn-sm" onClick={() => useAuth.getState().signOut()}>Sign out</button>
+      </div>
+      {local && (local.projects > 0 || local.tasks > 0) && (
+        <div className="field-inline account-row">
+          <span className="grow">This browser has {local.projects} project(s) and {local.tasks} task(s) saved from before sign-in.</span>
+          <button className="btn btn-sm btn-primary" disabled={!!importStatus} onClick={() => runLocalImport()}>
+            {importStatus ?? 'Import to account'}
+          </button>
+        </div>
+      )}
+    </>
   )
 }
