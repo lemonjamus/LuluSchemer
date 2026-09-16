@@ -24,7 +24,7 @@ interface UIState {
   panel: SidePanel
   toasts: Toast[]
   set: (patch: Partial<Omit<UIState, 'set' | 'toast' | 'dismiss'>>) => void
-  toast: (message: string, kind?: Toast['kind'], action?: Toast['action']) => void
+  toast: (message: string, kind?: Toast['kind'], action?: Toast['action'], sticky?: boolean) => void
   dismiss: (id: string) => void
 }
 
@@ -38,10 +38,10 @@ export const useUI = create<UIState>((set) => ({
   panel: null,
   toasts: [],
   set: (patch) => set(patch),
-  toast: (message, kind = 'info', action) => {
+  toast: (message, kind = 'info', action, sticky) => {
     const id = uid()
     set((s) => ({ toasts: [...s.toasts, { id, message, kind, action }] }))
-    if (kind === 'info') setTimeout(() => useUI.getState().dismiss(id), action ? 10000 : 3500)
+    if (kind === 'info' && !sticky) setTimeout(() => useUI.getState().dismiss(id), action ? 10000 : 3500)
   },
   dismiss: (id) => set((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) })),
 }))

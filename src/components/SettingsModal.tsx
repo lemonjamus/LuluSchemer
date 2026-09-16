@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import type { LuluUpdateInfo } from '../electron'
 import { hasClaudeKey, listLocalModels } from '../services/ai'
 import { cloud, localDataCounts } from '../services/storage'
 import { runLocalImport, useAuth } from '../stores/auth'
@@ -22,6 +23,8 @@ const SHORTCUTS: [string, string][] = [
 
 const STYLE_EXAMPLES = 'e.g. Talk like a blunt senior engineer. No fluff, no apologies. Use British spelling. Swearing is fine. Always end with one question that pushes the idea further.'
 
+const isDesktop = typeof window !== 'undefined' && !!window.lulu
+
 export function SettingsModal() {
   const open = useUI((s) => s.settingsOpen)
   const settings = useSettings()
@@ -42,9 +45,9 @@ export function SettingsModal() {
         <label className="field">
           <span>Provider</span>
           <select className="input" value={settings.provider} onChange={(e) => settings.set({ provider: e.target.value as ProviderChoice })}>
-            <option value="auto">Auto (Claude if key present, else mock)</option>
+            <option value="auto">{isDesktop ? 'Auto (local model)' : 'Auto (Claude if key present, else mock)'}</option>
             <option value="local">Local (Ollama / LM Studio)</option>
-            <option value="claude">Claude</option>
+            {!isDesktop && <option value="claude">Claude</option>}
             <option value="mock">Mock (offline development)</option>
           </select>
         </label>
@@ -59,7 +62,7 @@ export function SettingsModal() {
                 {settings.localModel && !localModels?.includes(settings.localModel) && <option value={settings.localModel}>{settings.localModel}</option>}
               </select>
             </label>
-            {!import.meta.env.DEV && (
+            {(isDesktop || !import.meta.env.DEV) && (
               <label className="field">
                 <span>Server URL</span>
                 <input
@@ -75,14 +78,14 @@ export function SettingsModal() {
             )}
             <p className="small muted">
               Local server:{' '}
-              {localModels === undefined ? '…' : localModels ? <span className="ok">{localModels.length} model(s) found</span> : <span className="warn">{import.meta.env.DEV ? 'not reachable. Start Ollama, or set LOCAL_AI_URL in .env and restart.' : 'not reachable. Start Ollama with OLLAMA_ORIGINS set to this site (see README).'}</span>}
+              {localModels === undefined ? '…' : localModels ? <span className="ok">{localModels.length} model(s) found</span> : <span className="warn">{import.meta.env.DEV && !isDesktop ? 'not reachable. Start Ollama, or set LOCAL_AI_URL in .env and restart.' : 'not reachable. Is Ollama running?'}</span>}
             </p>
             <label className="field-inline">
               <input type="checkbox" className="check" checked={settings.localThinking} onChange={(e) => settings.set({ localThinking: e.target.checked })} />
               <span>Let the model think before answering (smarter, but ~30× slower on this model)</span>
             </label>
           </>
-        ) : (
+        ) : isDesktop ? null : (
           <>
             <p className="small muted">
               Claude key on dev server:{' '}
@@ -126,9 +129,50 @@ export function SettingsModal() {
             </div>
           ))}
         </dl>
+        {isDesktop && <AboutSection />}
         <p className="small muted">{cloud ? 'Data is stored in your Supabase project and syncs across devices.' : 'Data is stored locally in this browser (IndexedDB).'}</p>
       </div>
     </Modal>
+  )
+}
+
+function AboutSection() {
+  const [version, setVersion] = useState('')
+  const [status, setStatus] = useState<string | null>(null)
+  const [found, setFound] = useState<LuluUpdateInfo | null>(null)
+
+  useEffect(() => {
+    window.lulu?.version().then(setVersion)
+  }, [])
+
+  const check = async () => {
+    setStatus('checking…')
+    try {
+      const info = await window.lulu!.update.check()
+      setFound(info)
+      setStatus(info ? `version ${info.version} available` : 'up to date')
+    } catch (e) {
+      setFound(null)
+      setStatus(`check failed: ${(e as Error).message.slice(0, 80)}`)
+    }
+  }
+
+  return (
+    <>
+      <h3 className="section-label">APP</h3>
+      <div className="field-inline account-row">
+        <span className="grow">
+          LuluSchemer {version} {status && <span className="muted">· {status}</span>}
+        </span>
+        {found ? (
+          <button className="btn btn-sm btn-primary" onClick={() => window.lulu!.update.apply()}>
+            {found.canInstall ? 'Relaunch' : 'Download'}
+          </button>
+        ) : (
+          <button className="btn btn-sm" onClick={check}>Check for updates</button>
+        )}
+      </div>
+    </>
   )
 }
 

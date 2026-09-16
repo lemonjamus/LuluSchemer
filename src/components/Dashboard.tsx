@@ -3,6 +3,7 @@ import { useMemo, useState } from 'react'
 import logo from '../assets/lulu-head.png'
 import { relTime } from '../lib'
 import type { Project } from '../models'
+import { cloud } from '../services/storage'
 import { useProjects } from '../stores/projects'
 import { useTasks } from '../stores/tasks'
 import { useUI } from '../stores/ui'
@@ -25,6 +26,11 @@ export function Dashboard() {
         <span className="brand">
           <img src={logo} alt="" className="brand-logo" />
           <span className="brand-name">LuluSchemer</span>
+          {!cloud && (
+            <span className="chip local-chip" data-tip="No account: this build has no Supabase keys, so everything stays in this browser." data-tip-side="bottom">
+              LOCAL
+            </span>
+          )}
         </span>
         <div className="topbar-actions">
           <button className="search-trigger" onClick={() => ui.set({ paletteOpen: true })} aria-label="Search or command">

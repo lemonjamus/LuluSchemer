@@ -118,10 +118,15 @@ export function hasClaudeKey(): Promise<boolean> {
   return claudeAvailable
 }
 
-/** Dev: through the Vite proxy (no CORS setup). Hosted: the browser calls your local server directly. */
-const localBase = () => (import.meta.env.DEV ? '/api/local' : useSettings.getState().localUrl.replace(/\/+$/, ''))
+/** The Electron bridge, when running as the desktop app. */
+const desktop = () => (typeof window === 'undefined' ? undefined : window.lulu)
+
+/** Desktop: the main process calls the server. Browser dev: the Vite proxy. */
+const localBase = () => (import.meta.env.DEV && !desktop() ? '/api/local' : useSettings.getState().localUrl.replace(/\/+$/, ''))
 
 export async function listLocalModels(): Promise<string[]> {
+  const app = desktop()
+  if (app) return app.ollama.models(localBase())
   const r = await fetch(`${localBase()}/v1/models`)
   if (!r.ok) throw new Error(`local server returned ${r.status}`)
   return ((await r.json()).data ?? []).map((m: { id: string }) => m.id)
@@ -135,32 +140,22 @@ export const localProvider: AIProvider = {
   async stream(req, onText, signal) {
     const model = req.model || (await listLocalModels())[0]
     if (!model) throw new Error('No models found on the local server. Pull one first, e.g. `ollama pull qwen3`.')
-    const res = await fetch(`${localBase()}/v1/chat/completions`, {
-      method: 'POST',
-      signal,
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        model,
-        stream: true,
-        ...(req.think ? {} : { reasoning_effort: 'none' }), // Ollama: skip the thinking phase
-        messages: [
-          { role: 'system', content: req.system },
-          ...req.messages.map((m) => ({
-            role: m.role,
-            content: m.images.length
-              ? [...m.images.map((i) => ({ type: 'image_url', image_url: { url: `data:${i.mediaType};base64,${i.data}` } })), { type: 'text', text: m.text }]
-              : m.text,
-          })),
-        ],
-      }),
-    })
-    if (!res.ok) {
-      const detail = (await res.text().catch(() => '')).slice(0, 300)
-      throw new Error(`Local model (${model}) returned ${res.status}. ${detail || (import.meta.env.DEV ? 'Is Ollama running? Check LOCAL_AI_URL in .env.' : 'Is Ollama running with OLLAMA_ORIGINS allowing this site?')}`)
+    const body = {
+      model,
+      stream: true,
+      ...(req.think ? {} : { reasoning_effort: 'none' }), // Ollama: skip the thinking phase
+      messages: [
+        { role: 'system', content: req.system },
+        ...req.messages.map((m) => ({
+          role: m.role,
+          content: m.images.length
+            ? [...m.images.map((i) => ({ type: 'image_url', image_url: { url: `data:${i.mediaType};base64,${i.data}` } })), { type: 'text', text: m.text }]
+            : m.text,
+        })),
+      ],
     }
 
-    // Parse the SSE stream; hide <think> reasoning (Qwen3 etc.) as it streams.
-    const reader = res.body!.pipeThrough(new TextDecoderStream()).getReader()
+    // Parse the SSE text; hide <think> reasoning (Qwen3 etc.) as it streams.
     let buf = '', full = '', shown = 0
     const flush = (final: boolean) => {
       const visible = stripThinking(full, final)
@@ -169,10 +164,8 @@ export const localProvider: AIProvider = {
         shown = visible.length
       }
     }
-    for (;;) {
-      const { value, done } = await reader.read()
-      if (done) break
-      buf += value
+    const consume = (chunk: string) => {
+      buf += chunk
       const lines = buf.split('\n')
       buf = lines.pop()!
       for (const line of lines) {
@@ -182,6 +175,38 @@ export const localProvider: AIProvider = {
       }
       flush(false)
     }
+
+    const app = desktop()
+    if (app) {
+      // Desktop: the request is made by the app's own process, so no browser origin is involved.
+      const id = crypto.randomUUID()
+      const abort = () => app.ollama.abort(id)
+      signal.addEventListener('abort', abort, { once: true })
+      try {
+        await app.ollama.chat(id, localBase(), body, consume)
+      } finally {
+        signal.removeEventListener('abort', abort)
+      }
+      flush(true)
+      return
+    }
+
+    const res = await fetch(`${localBase()}/v1/chat/completions`, {
+      method: 'POST',
+      signal,
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+    })
+    if (!res.ok) {
+      const detail = (await res.text().catch(() => '')).slice(0, 300)
+      throw new Error(`Local model (${model}) returned ${res.status}. ${detail || 'Is Ollama running?'}`)
+    }
+    const reader = res.body!.pipeThrough(new TextDecoderStream()).getReader()
+    for (;;) {
+      const { value, done } = await reader.read()
+      if (done) break
+      consume(value)
+    }
     flush(true)
   },
 }
@@ -190,5 +215,6 @@ export async function resolveProvider(choice: 'auto' | 'claude' | 'mock' | 'loca
   if (choice === 'claude') return claudeProvider
   if (choice === 'mock') return mockProvider
   if (choice === 'local') return localProvider
+  if (desktop()) return localProvider // no Claude proxy in the desktop app
   return (await hasClaudeKey()) ? claudeProvider : mockProvider
 }

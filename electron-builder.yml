@@ -1,0 +1,30 @@
+appId: com.luluschemer.app
+productName: LuluSchemer
+directories:
+  # Outside OneDrive: it locks files mid-sync and packaging fails with EPERM on rename.
+  output: ${env.LOCALAPPDATA}/luluschemer-release
+  buildResources: build
+files:
+  - out/**
+  - package.json
+publish:
+  provider: github
+  owner: lemonjamus
+  repo: LuluSchemer
+
+win:
+  target: nsis
+  icon: build/icon.ico
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  artifactName: ${productName}-Setup-${version}.${ext}
+
+# macOS needs a build on a Mac (or a macOS CI runner) and build/icon.icns.
+# Without an Apple Developer certificate the app still runs, but updates are
+# download-and-drag rather than silent — see README.
+mac:
+  target: dmg
+  icon: build/icon.icns
+  category: public.app-category.productivity

@@ -1,62 +1,76 @@
 # LuluSchemer
 
-Private visual workspace: projects, tasks, an infinite canvas (draw / text / notes / task cards / images), and an AI collaborator that sees your project and your screenshots.
+Private visual workspace: projects, tasks, an infinite canvas (draw / text / notes / task cards / images), and an AI collaborator that sees your project and your screenshots. Runs as a Windows desktop app; your account and data live in Supabase, so any machine you sign in on shows the same workspace.
 
 ## Run
 
 ```sh
 npm install
-cp .env.example .env   # optional: add ANTHROPIC_API_KEY for real AI answers
-npm run dev            # http://localhost:5173
+cp .env.example .env   # add your Supabase URL + publishable key
+npm run dev:app        # the desktop app (Electron)
+npm run dev            # browser-only, for quick UI work
 ```
 
-Without a key the AI panel uses the **mock provider**, which says so in every reply and only echoes what it received. With a key, the Vite dev server proxies `/api/anthropic` and injects the key server-side, so it never reaches the browser bundle. Model and provider are in Settings.
+`npm test` runs the unit tests, `npm run lint` runs oxlint, `npm run build` type-checks and builds the web renderer, `npm run build:app` builds the whole desktop app into `out/`.
 
-**Local models (Ollama, LM Studio, llama.cpp):** start the server, then pick **Settings → Provider → Local** and choose a model. Requests go through `/api/local`, which points at `LOCAL_AI_URL` (default Ollama, `http://127.0.0.1:11434`), so no CORS setup is needed. "Let the model think" is off by default. Qwen3-style models reply about 30× faster without it.
+If you ever start Electron by hand rather than through these scripts, clear `ELECTRON_RUN_AS_NODE` first — VS Code's terminal sets it, and it makes `electron.exe` run as plain Node, so the app dies with "Cannot read properties of undefined (reading 'requestSingleInstanceLock')". The npm scripts already handle this.
 
-**Tone:** Settings → Custom instructions is added to the system prompt for every provider.
+## AI
 
-`npm test` runs the unit tests, `npm run lint` runs oxlint, and `npm run build` typechecks and builds.
+The desktop app talks to a **local model** (Ollama, LM Studio, llama.cpp) through its own process, so there is no CORS setup, no `OLLAMA_ORIGINS`, and no local-network prompt — it just works while Ollama is running.
+
+- Settings → Provider → **Local**, then pick a model. Server URL defaults to `http://127.0.0.1:11434`.
+- "Let the model think" is off by default; Qwen3-style models answer roughly 30× faster without it.
+- Settings → **Custom instructions** is added to every request, so you can set tone and persona.
+- Claude still works in `npm run dev` (browser) if `ANTHROPIC_API_KEY` is in `.env`; it is hidden in the desktop app, which has no server to keep the key.
+
+## Accounts and sync (Supabase)
+
+1. Create a project at [supabase.com](https://supabase.com) and run `supabase/schema.sql` in its SQL Editor (tables, row-level security, private `files` bucket; safe to re-run).
+2. Copy the Project URL and publishable key into `.env` as `VITE_SUPABASE_URL` and `VITE_SUPABASE_PUBLISHABLE_KEY`.
+3. Create your account in the app, confirm the email, then turn **off** new sign-ups in Supabase → Authentication → Sign In / Providers.
+4. Settings → Account → **Import to account** copies anything a browser saved before sign-in.
+
+Without those two variables the app runs local-only (IndexedDB) and shows a yellow LOCAL badge. Data reloads when the window regains focus; if two devices edit the same canvas at once, the last save wins. Session tokens are stored unencrypted in the app's profile folder — fine for personal use.
+
+## Releases and updates
+
+Versions are published as GitHub Releases and the app checks for them 10 seconds after launch, hourly, and from Settings → APP → Check for updates.
+
+- **Windows:** the new installer downloads in the background; a "Update x.y.z is ready · Relaunch" toast appears; clicking it restarts into the new version. No code-signing certificate needed — Windows SmartScreen only warns on the first manual install ("More info → Run anyway").
+- **macOS:** Apple refuses to apply updates to apps without a Developer ID certificate, so the toast offers **Download** and you drag the new app over the old one. A $99/year Apple membership would enable the silent flow.
+
+To publish a release:
+
+```sh
+npm version patch          # or minor / major
+GH_TOKEN=<token with repo scope> npm run release
+```
+
+`electron-builder` uploads the installer and `latest.yml` to a GitHub Release on `lemonjamus/LuluSchemer`. Building a macOS `.dmg` requires a Mac or a macOS CI runner.
 
 ## Layout
 
 | Path | What |
 | --- | --- |
-| `src/models.ts` | Entity types (Project, Task, Canvas, CanvasObject, AIConversation) |
-| `src/services/storage.ts` | `Repo<T>` + `FileStorage` interfaces with IndexedDB and Supabase implementations, plus local → account import |
+| `electron/main.ts` | Window, screen-capture permission, single instance |
+| `electron/ollama.ts` | Local-model calls and streaming, made from the app process |
+| `electron/updater.ts` | Version check (GitHub Releases) and install / download |
+| `electron/preload.ts`, `src/electron.d.ts` | The only bridge the page can use, and its types |
+| `electron.vite.config.ts`, `electron-builder.yml` | Build and packaging config |
+| `src/models.ts` | Entity types (Project, Task, Canvas, CanvasObject, AIMessage) |
+| `src/services/storage.ts` | `Repo<T>` + `FileStorage` with IndexedDB and Supabase implementations, plus local → account import |
 | `src/services/supabase.ts`, `src/stores/auth.ts` | Supabase client, session, sign-in / sign-out |
-| `supabase/schema.sql` | Tables, row-level security, private `files` bucket |
-| `netlify/edge-functions/anthropic.ts` | Hosted Claude proxy (checks the Supabase session) |
-| `src/services/ai.ts` | `AIProvider` interface, Claude provider (via proxy), mock provider |
+| `src/services/ai.ts` | Provider interface, local (Ollama) provider, Claude provider, mock provider |
 | `src/services/aiContext.ts` | System prompt from project context, AI action prompts |
-| `src/services/screenshot.ts` | Screen Capture API frame grab + crop |
+| `src/services/screenshot.ts` | Screen capture and cropping for the snip tool |
 | `src/stores/*` | Zustand stores: projects, tasks, canvas (undo history, autosave), ai, ui/settings |
 | `src/components/canvas/*` | Konva stage, object nodes, inline text editor, selection snapshot |
-| `src/components/*` | Dashboard, Workspace, AI panel, command palette, snip overlay, settings |
-| `src/theme.ts` + `src/styles.css` | Colour tokens and all styling |
-
-## Accounts and sync (Supabase)
-
-1. Create a project at [supabase.com](https://supabase.com). In **SQL Editor**, run `supabase/schema.sql`. It creates the tables, row-level security and a private `files` bucket, and is safe to re-run.
-2. In **Project Settings → API Keys**, copy the Project URL and the publishable key into `.env` as `VITE_SUPABASE_URL` and `VITE_SUPABASE_PUBLISHABLE_KEY`. Restart `npm run dev` and create your account.
-3. In **Authentication → Sign In / Providers**, turn off new sign-ups once your account exists. Otherwise anyone could create an account and use your Claude key through the hosted proxy. `ALLOWED_EMAILS` is a second lock.
-4. Settings → Account → **Import to account** copies anything this browser saved before you signed in. It is also offered on first sign-in.
-
-Without the two `VITE_SUPABASE_*` variables the app stays local-only (IndexedDB). Data reloads when you return to the tab. Two devices editing the same canvas at the same moment: the last save wins.
-
-## Deploy to Netlify
-
-1. Push the repo to GitHub and import it in Netlify. Build settings come from `netlify.toml`.
-2. In **Site configuration → Environment variables**, add these with scope **All** (Builds and Functions): `VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY`, `ANTHROPIC_API_KEY`, and optionally `ALLOWED_EMAILS=you@example.com`. Redeploy after changing them.
-3. In **Supabase → Authentication → URL Configuration**, set the Site URL to your Netlify URL, so confirmation emails link back to the site.
-
-On the hosted site `netlify/edge-functions/anthropic.ts` takes over from the dev proxy. It only forwards requests from signed-in (and allowed) users.
-
-**Local models on the hosted site:** the browser calls Ollama directly, so Ollama must allow the site. Set the Windows environment variable `OLLAMA_ORIGINS=https://your-site.netlify.app`, restart Ollama, and allow local network access if Chrome asks. This only works on the PC running Ollama; phones can't reach it.
+| `supabase/schema.sql` | Tables, row-level security, private `files` bucket |
 
 ## Known limits
 
-- Screen snips need the browser's share picker each time; that is a browser security rule. Chromium offers the current tab first.
-- The eraser is pixel-based (destination-out) and only affects the active layer.
-- No touch pinch-zoom or stylus pressure yet. Trackpad pinch and Ctrl+wheel zoom work.
-- Deleted images stay in IndexedDB so undo can restore them. They are removed when their project is deleted.
+- Screen snips capture a whole screen; crop in the overlay that follows.
+- The eraser is pixel-based and only affects the active layer.
+- No touch pinch-zoom or stylus pressure; trackpad pinch and Ctrl+wheel zoom work.
+- Deleted images stay in storage so undo can restore them; they are removed with their project.

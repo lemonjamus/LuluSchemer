@@ -7,6 +7,7 @@ import { SettingsModal } from './components/SettingsModal'
 import { SnipOverlay } from './components/SnipOverlay'
 import { Toasts } from './components/ui'
 import { Workspace } from './components/Workspace'
+import type { LuluUpdateInfo } from './electron'
 import { cloud, localDataCounts } from './services/storage'
 import { runLocalImport, useAuth } from './stores/auth'
 import { useProjects } from './stores/projects'
@@ -45,8 +46,22 @@ export default function App() {
       }
     }
     window.addEventListener('keydown', onKey)
+
+    // Desktop only: offer the new version when one has been found.
+    const app = window.lulu
+    const show = (info: LuluUpdateInfo) =>
+      useUI.getState().toast(
+        info.canInstall ? `Update ${info.version} is ready` : `Update ${info.version} is available`,
+        'info',
+        { label: info.canInstall ? 'Relaunch' : 'Download', run: () => void app?.update.apply() },
+        true, // stays until dismissed
+      )
+    const stopUpdates = app?.update.onAvailable(show)
+    app?.update.check().then((info) => info && show(info), () => {}) // a failed check is reported in Settings
+
     return () => {
       stopAuth()
+      stopUpdates?.()
       window.removeEventListener('keydown', onKey)
     }
   }, [])

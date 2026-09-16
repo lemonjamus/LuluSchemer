@@ -1,11 +1,17 @@
 {
   "name": "luluschemer",
   "private": true,
-  "version": "0.0.0",
+  "version": "1.0.0",
+  "description": "Private visual workspace: projects, tasks, infinite canvas and a local AI collaborator",
+  "author": "lemonjamus",
+  "main": "out/main/index.cjs",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "dev:app": "electron-vite dev",
+    "build:app": "electron-vite build",
+    "release": "electron-vite build && electron-builder --win --publish always",
     "lint": "oxlint",
     "test": "vitest run",
     "preview": "vite preview"
@@ -13,6 +19,7 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.125.0",
     "@supabase/supabase-js": "^2.116.0",
+    "electron-updater": "^6.8.9",
     "idb-keyval": "^6.3.0",
     "konva": "^10.5.0",
     "lucide-react": "^1.46.0",
@@ -26,6 +33,9 @@
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.7",
     "@vitejs/plugin-react": "^6.1.1",
+    "electron": "^44.4.1",
+    "electron-builder": "^26.15.3",
+    "electron-vite": "^6.0.0-beta.1",
     "oxlint": "^1.81.0",
     "typescript": "~6.0.2",
     "vite": "^8.3.0",
