@@ -1,8 +1,10 @@
 appId: com.luluschemer.app
 productName: LuluSchemer
 directories:
-  # Outside OneDrive: it locks files mid-sync and packaging fails with EPERM on rename.
-  output: ${env.LOCALAPPDATA}/luluschemer-release
+  # Plain relative path so CI runners work. Building here locally can fail with EPERM
+  # because OneDrive locks files mid-sync; build elsewhere with
+  #   npx electron-builder --win --config.directories.output=%LOCALAPPDATA%/luluschemer-release
+  output: release
   buildResources: build
 files:
   - out/**
