@@ -31,5 +31,6 @@ nsis:
 # download-and-drag rather than silent — see README.
 mac:
   target: dmg
-  icon: build/icon.icns
+  icon: build/icon.png # electron-builder converts it to .icns during a macOS build
   category: public.app-category.productivity
+  identity: null # unsigned: no Apple certificate, so updates are download-and-drag

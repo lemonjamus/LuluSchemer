@@ -44,10 +44,14 @@ To publish a release:
 
 ```sh
 npm version patch          # or minor / major
-GH_TOKEN=<token with repo scope> npm run release
+git push --follow-tags     # the tag triggers .github/workflows/release.yml
 ```
 
-`electron-builder` uploads the installer and `latest.yml` to a GitHub Release on `lemonjamus/LuluSchemer`. Building a macOS `.dmg` requires a Mac or a macOS CI runner.
+The workflow builds the Windows installer on a Windows runner and the macOS `.dmg` on a macOS runner, and uploads both to the same GitHub Release. A `.dmg` cannot be built on Windows, which is why this runs in CI.
+
+**One-time setup:** under Settings → Secrets and variables → Actions, add `VITE_SUPABASE_URL` and `VITE_SUPABASE_PUBLISHABLE_KEY`. They are compiled into the app at build time; without them the released apps run local-only with no sign-in. Nothing else is needed — the workflow's `GITHUB_TOKEN` is provided automatically.
+
+To build locally instead: `GH_TOKEN=<token with repo scope> npm run release:win` (or `release:mac` on a Mac).
 
 ## Layout
 
