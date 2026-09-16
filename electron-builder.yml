@@ -39,4 +39,11 @@ mac:
       arch: [arm64, x64]
   icon: build/icon.png # electron-builder converts it to .icns during a macOS build
   category: public.app-category.productivity
-  identity: null # unsigned: no Apple certificate, so updates are download-and-drag
+  # Apple Silicon refuses to launch a binary with no signature at all, and reports it as
+  # "damaged". Ad-hoc signing ("-") costs nothing and no Apple account, and fixes that.
+  # It is not a Developer ID: Gatekeeper still warns on first launch (right-click → Open),
+  # and updates stay download-and-drag.
+  identity: '-'
+  # Hardened runtime defaults to true and, with an ad-hoc signature, rejects Electron's
+  # pre-signed frameworks (different Team ID) — the app would fail to start.
+  hardenedRuntime: false

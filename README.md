@@ -40,6 +40,8 @@ Versions are published as GitHub Releases and the app checks for them 10 seconds
 - **Windows:** the new installer downloads in the background; a "Update x.y.z is ready · Relaunch" toast appears; clicking it restarts into the new version. No code-signing certificate needed — Windows SmartScreen only warns on the first manual install ("More info → Run anyway").
 - **macOS:** Apple refuses to apply updates to apps without a Developer ID certificate, so the toast offers **Download** and you drag the new app over the old one. A $99/year Apple membership would enable the silent flow.
 
+**First launch on macOS.** The app is ad-hoc signed, not signed with a Developer ID, so Gatekeeper shows "LuluSchemer can't be opened because Apple cannot check it for malicious software". Right-click the app → **Open** → Open, once per install. If macOS instead claims the app or disk image is **damaged**, it was built before ad-hoc signing was added (1.0.4 and earlier): `xattr -cr /Applications/LuluSchemer.app` clears the quarantine flag and it will start.
+
 To publish a release:
 
 ```sh
