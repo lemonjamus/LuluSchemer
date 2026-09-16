@@ -1,5 +1,5 @@
 import { afterEach, expect, test, vi } from 'vitest'
-import handler from './anthropic'
+import handler from '../netlify/edge-functions/anthropic'
 
 const ENV: Record<string, string> = {
   ANTHROPIC_API_KEY: 'sk-real',
