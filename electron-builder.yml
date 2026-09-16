@@ -11,6 +11,11 @@ publish:
   provider: github
   owner: lemonjamus
   repo: LuluSchemer
+  # Default is "draft", and drafts are invisible to the updater — publish straight away.
+  releaseType: release
+  # Private repo: assets are only downloadable through the API, and the app needs a
+  # GH_TOKEN to do it. Set this to false once the repo is public (then no token is needed).
+  private: true
 
 win:
   target: nsis

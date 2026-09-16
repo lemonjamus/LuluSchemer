@@ -41,10 +41,17 @@ export function initUpdater(getWindow: () => BrowserWindow | null) {
 
   /** Ask GitHub directly; used where we cannot install, and as the fallback everywhere. */
   async function checkGithub() {
+    // A private repo answers 404 to anonymous callers, so a token is required to see releases.
+    const token = process.env.GH_TOKEN
     const res = await fetch(`https://api.github.com/repos/${REPO}/releases/latest`, {
-      headers: { accept: 'application/vnd.github+json' },
+      headers: { accept: 'application/vnd.github+json', ...(token ? { authorization: `Bearer ${token}` } : {}) },
     })
-    if (res.status === 404) return null // repo has no releases yet
+    if (res.status === 404) {
+      // Without a token this is indistinguishable from "private repo, no access" — say so rather
+      // than claiming the app is up to date.
+      if (!token) throw new Error('No access to releases (is the repository private?)')
+      return null // authorised, so it really has no releases yet
+    }
     if (!res.ok) throw new Error(`GitHub returned ${res.status}`)
     const release = (await res.json()) as { tag_name?: string; html_url?: string; assets?: { name: string; browser_download_url: string }[] }
     const version = String(release.tag_name ?? '').replace(/^v/, '')
