@@ -1,7 +1,7 @@
 {
   "name": "luluschemer",
   "private": true,
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "Private visual workspace: projects, tasks, infinite canvas and a local AI collaborator",
   "author": "lemonjamus",
   "main": "out/main/index.cjs",
