@@ -150,7 +150,11 @@ function AboutSection() {
     try {
       const info = await window.lulu!.update.check()
       setFound(info)
-      setStatus(info ? `version ${info.version} available` : 'up to date')
+      setStatus(
+        !info ? 'up to date'
+          : info.state === 'downloading' ? `version ${info.version} downloading…`
+            : info.state === 'ready' ? `version ${info.version} ready` : `version ${info.version} available`,
+      )
     } catch (e) {
       setFound(null)
       setStatus(`check failed: ${(e as Error).message.slice(0, 80)}`)
@@ -165,8 +169,8 @@ function AboutSection() {
           LuluSchemer {version} {status && <span className="muted">· {status}</span>}
         </span>
         {found ? (
-          <button className="btn btn-sm btn-primary" onClick={() => window.lulu!.update.apply()}>
-            {found.canInstall ? 'Relaunch' : 'Download'}
+          <button className="btn btn-sm btn-primary" disabled={found.state === 'downloading'} onClick={() => window.lulu!.update.apply()}>
+            {found.state === 'ready' ? 'Relaunch' : found.state === 'downloading' ? 'Downloading…' : 'Download'}
           </button>
         ) : (
           <button className="btn btn-sm" onClick={check}>Check for updates</button>

@@ -49,13 +49,15 @@ export default function App() {
 
     // Desktop only: offer the new version when one has been found.
     const app = window.lulu
-    const show = (info: LuluUpdateInfo) =>
+    const show = (info: LuluUpdateInfo) => {
+      if (info.state === 'downloading') return // nothing to click yet; wait for "ready"
       useUI.getState().toast(
-        info.canInstall ? `Update ${info.version} is ready` : `Update ${info.version} is available`,
+        info.state === 'ready' ? `Update ${info.version} is ready` : `Update ${info.version} is available`,
         'info',
-        { label: info.canInstall ? 'Relaunch' : 'Download', run: () => void app?.update.apply() },
+        { label: info.state === 'ready' ? 'Relaunch' : 'Download', run: () => void app?.update.apply() },
         true, // stays until dismissed
       )
+    }
     // Email confirmation links come back as luluschemer:// and sign the user in here.
     const stopDeepLinks = app?.onDeepLink(async (url) => {
       const problem = await completeDeepLinkAuth(url)

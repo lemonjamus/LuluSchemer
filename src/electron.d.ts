@@ -1,8 +1,8 @@
 /** Bridge exposed by electron/preload.ts. Undefined in the browser build. */
 export interface LuluUpdateInfo {
   version: string
-  /** true: relaunching installs it (Windows). false: we can only open the download page. */
-  canInstall: boolean
+  /** downloading: being fetched. ready: relaunch installs it. manual: open the download page. */
+  state: 'downloading' | 'ready' | 'manual'
   url?: string
 }
 

@@ -8,8 +8,8 @@ const canSelfInstall = process.platform === 'win32'
 
 export interface UpdateInfo {
   version: string
-  /** true: restart applies it. false: we can only open the download. */
-  canInstall: boolean
+  /** downloading: being fetched now. ready: relaunch installs it. manual: open the download page. */
+  state: 'downloading' | 'ready' | 'manual'
   url?: string
 }
 
@@ -32,11 +32,15 @@ export function initUpdater(getWindow: () => BrowserWindow | null) {
   autoUpdater.autoInstallOnAppQuit = canSelfInstall
 
   const notify = (info: UpdateInfo) => {
+    // Never downgrade an already-downloaded update back to "downloading".
+    if (latest?.version === info.version && latest.state === 'ready') return
     latest = info
     getWindow()?.webContents.send('update:available', info)
   }
 
-  autoUpdater.on('update-downloaded', (info) => notify({ version: info.version, canInstall: true }))
+  // Found, but the installer still has to come down — report it now rather than after the download.
+  autoUpdater.on('update-available', (info) => notify({ version: info.version, state: 'downloading' }))
+  autoUpdater.on('update-downloaded', (info) => notify({ version: info.version, state: 'ready' }))
   autoUpdater.on('error', (e) => console.error('[updater]', e.message))
 
   /** Ask GitHub directly; used where we cannot install, and as the fallback everywhere. */
@@ -58,7 +62,7 @@ export function initUpdater(getWindow: () => BrowserWindow | null) {
     if (!version || !isNewer(version, app.getVersion())) return null
     const wanted = process.platform === 'darwin' ? '.dmg' : process.platform === 'win32' ? '.exe' : '.AppImage'
     const asset = release.assets?.find((a) => a.name.endsWith(wanted))
-    return { version, canInstall: false, url: asset?.browser_download_url ?? release.html_url }
+    return { version, state: 'manual' as const, url: asset?.browser_download_url ?? release.html_url }
   }
 
   /** Resolves with the newest version (or null when current); rejects if the check itself failed. */
@@ -66,8 +70,11 @@ export function initUpdater(getWindow: () => BrowserWindow | null) {
     if (!app.isPackaged) return null // a dev run is never "out of date"
     if (canSelfInstall) {
       try {
-        // electron-updater downloads in the background and fires update-downloaded.
-        await autoUpdater.checkForUpdates()
+        // Report the found version straight away; the download runs on in the background
+        // and update-downloaded flips it to "ready".
+        const result = await autoUpdater.checkForUpdates()
+        const version = result?.updateInfo?.version
+        if (version && isNewer(version, app.getVersion())) notify({ version, state: 'downloading' })
         return latest
       } catch (e) {
         // Missing app-update.yml, no network, etc. Fall through: GitHub can still offer a download.
@@ -84,12 +91,12 @@ export function initUpdater(getWindow: () => BrowserWindow | null) {
 
   ipcMain.handle('update:check', check)
   ipcMain.handle('update:apply', () => {
-    if (latest?.canInstall) {
+    if (latest?.state === 'ready') {
       autoUpdater.quitAndInstall()
       return true
     }
-    if (latest?.url) shell.openExternal(latest.url)
-    return false
+    if (latest?.state === 'manual' && latest.url) shell.openExternal(latest.url)
+    return false // still downloading: nothing to do yet
   })
   ipcMain.handle('app:version', () => app.getVersion())
 }
