@@ -44,7 +44,9 @@ export const useAuth = create<AuthState>((set) => ({
   signUp: async (email, password) => {
     const { data, error } = await supabase!.auth.signUp({ email, password })
     if (error) return friendly(error.message)
-    return data.session ? null : 'Check your inbox to confirm the account, then sign in.'
+    // The confirmation link verifies the account and then redirects to the project's Site URL,
+    // which is a web address this desktop app doesn't serve — the browser error is harmless.
+    return data.session ? null : 'Check your inbox and open the link, then sign in here. The link may end on a "can’t connect" page; your account is confirmed anyway.'
   },
 
   signOut: async () => {
