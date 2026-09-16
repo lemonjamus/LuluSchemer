@@ -47,7 +47,7 @@ npm version patch          # or minor / major
 git push --follow-tags     # the tag triggers .github/workflows/release.yml
 ```
 
-The workflow builds the Windows installer on a Windows runner and the macOS `.dmg` on a macOS runner, and uploads both to the same GitHub Release. A `.dmg` cannot be built on Windows, which is why this runs in CI.
+The workflow builds the Windows installer on a Windows runner and the macOS `.dmg`s (Apple Silicon and Intel) on a macOS runner, and uploads them to the same GitHub Release along with the `latest.yml` / `latest-mac.yml` manifests the updater reads. A `.dmg` cannot be built on Windows, which is why this runs in CI.
 
 **One-time setup:** under Settings → Secrets and variables → Actions, add `VITE_SUPABASE_URL` and `VITE_SUPABASE_PUBLISHABLE_KEY`. They are compiled into the app at build time; without them the released apps run local-only with no sign-in. Nothing else is needed — the workflow's `GITHUB_TOKEN` is provided automatically.
 
