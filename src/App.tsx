@@ -9,7 +9,7 @@ import { Toasts } from './components/ui'
 import { Workspace } from './components/Workspace'
 import type { LuluUpdateInfo } from './electron'
 import { cloud, localDataCounts } from './services/storage'
-import { runLocalImport, useAuth } from './stores/auth'
+import { completeDeepLinkAuth, runLocalImport, useAuth } from './stores/auth'
 import { useProjects } from './stores/projects'
 import { useTasks } from './stores/tasks'
 import { useUI } from './stores/ui'
@@ -56,11 +56,17 @@ export default function App() {
         { label: info.canInstall ? 'Relaunch' : 'Download', run: () => void app?.update.apply() },
         true, // stays until dismissed
       )
+    // Email confirmation links come back as luluschemer:// and sign the user in here.
+    const stopDeepLinks = app?.onDeepLink(async (url) => {
+      const problem = await completeDeepLinkAuth(url)
+      useUI.getState().toast(problem ?? 'Email confirmed — you are signed in.', problem ? 'error' : 'info')
+    })
     const stopUpdates = app?.update.onAvailable(show)
     app?.update.check().then((info) => info && show(info), () => {}) // a failed check is reported in Settings
 
     return () => {
       stopAuth()
+      stopDeepLinks?.()
       stopUpdates?.()
       window.removeEventListener('keydown', onKey)
     }

@@ -29,6 +29,13 @@ contextBridge.exposeInMainWorld('lulu', {
     abort: (id: string) => ipcRenderer.send('ollama:abort', id),
   },
 
+  /** luluschemer:// links, e.g. the Supabase email confirmation coming back to the app. */
+  onDeepLink: (callback: (url: string) => void) => {
+    const listener = (_event: unknown, url: string) => callback(url)
+    ipcRenderer.on('deep-link', listener)
+    return () => ipcRenderer.off('deep-link', listener)
+  },
+
   update: {
     check: () => ipcRenderer.invoke('update:check'),
     apply: () => ipcRenderer.invoke('update:apply'),

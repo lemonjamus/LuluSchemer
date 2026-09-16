@@ -21,6 +21,34 @@ interface AuthState {
   signOut: () => Promise<void>
 }
 
+/** Only the desktop app can receive these; the browser build keeps the default redirect. */
+const DEEP_LINK_CALLBACK = typeof window !== 'undefined' && window.lulu ? 'luluschemer://auth-callback' : ''
+
+/**
+ * Finish a sign-in that came back through a luluschemer:// link. Supabase sends either
+ * tokens in the URL fragment or a PKCE code to exchange, so handle both.
+ */
+export async function completeDeepLinkAuth(url: string): Promise<string | null> {
+  if (!supabase) return null
+  const parsed = new URL(url)
+  const params = new URLSearchParams(`${parsed.search.slice(1)}&${parsed.hash.slice(1)}`)
+  const error = params.get('error_description') ?? params.get('error')
+  if (error) return friendly(error)
+
+  const accessToken = params.get('access_token')
+  const refreshToken = params.get('refresh_token')
+  if (accessToken && refreshToken) {
+    const { error: e } = await supabase.auth.setSession({ access_token: accessToken, refresh_token: refreshToken })
+    return e ? friendly(e.message) : null
+  }
+  const code = params.get('code')
+  if (code) {
+    const { error: e } = await supabase.auth.exchangeCodeForSession(code)
+    return e ? friendly(e.message) : null
+  }
+  return null // a link with nothing to act on (e.g. already confirmed)
+}
+
 const friendly = (message: string) =>
   /failed to fetch|networkerror|load failed/i.test(message) ? "Can't reach Supabase. Check your connection (or VITE_SUPABASE_URL)." : message
 
@@ -42,7 +70,12 @@ export const useAuth = create<AuthState>((set) => ({
   },
 
   signUp: async (email, password) => {
-    const { data, error } = await supabase!.auth.signUp({ email, password })
+    const { data, error } = await supabase!.auth.signUp({
+      email,
+      password,
+      // Send the confirmation link back into the app instead of a web page it doesn't serve.
+      ...(DEEP_LINK_CALLBACK ? { options: { emailRedirectTo: DEEP_LINK_CALLBACK } } : {}),
+    })
     if (error) return friendly(error.message)
     // The confirmation link verifies the account and then redirects to the project's Site URL,
     // which is a web address this desktop app doesn't serve — the browser error is harmless.

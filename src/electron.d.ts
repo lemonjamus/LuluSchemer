@@ -8,6 +8,8 @@ export interface LuluUpdateInfo {
 
 export interface LuluBridge {
   version(): Promise<string>
+  /** luluschemer:// links (Supabase email confirmation). Returns an unsubscribe function. */
+  onDeepLink(callback: (url: string) => void): () => void
   ollama: {
     models(base: string): Promise<string[]>
     chat(id: string, base: string, body: unknown, onChunk: (text: string) => void): Promise<void>
